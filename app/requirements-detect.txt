@@ -1,0 +1,7 @@
+# Этап detect: инференс на CPU Intel (AVX-512 VNNI / AMX) через OpenVINO.
+# Версии проверены вместе (Python 3.12+). Для изолированной сети — через --build-arg PIP_INDEX_URL (Nexus).
+numpy==2.4.6
+openvino==2026.4.1
+# INT8-квантование моделей на кадрах из архива: python -m tsarchive quantize ...
+nncf==3.4.0
+pillow==13.0.0

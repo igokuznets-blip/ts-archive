@@ -1,0 +1,10 @@
+# Детектор людей скачивается: sh tools/get_models.sh
+*.onnx
+*.xml
+*.bin
+*.pt
+# Модели касок входят в репозиторий
+!heads_nano.onnx
+!heads_nano.pt
+!heads_nano.json
+!helmet_cls.onnx

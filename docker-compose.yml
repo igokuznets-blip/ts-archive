@@ -1,0 +1,109 @@
+# Архив видеофрагментов MPEG-2 TS без объектного хранилища:
+# PostgreSQL + файловая система + FFmpeg-воркеры + FastAPI + Nginx (X-Accel-Redirect).
+name: ts-archive
+
+x-app: &app
+  build: { context: ., dockerfile: app/Dockerfile, target: app }
+  image: ${APP_IMAGE:-ts-archive:latest}
+  restart: unless-stopped
+  env_file: .env
+  environment:
+    DATABASE_URL: postgresql://${POSTGRES_USER:-tsa}:${POSTGRES_PASSWORD:-tsa}@db:5432/${POSTGRES_DB:-tsarchive}
+    ARCHIVE_ROOT: /archive
+  volumes:
+    - ${ARCHIVE_PATH:-./data/archive}:/archive
+  depends_on:
+    db: { condition: service_healthy }
+
+services:
+  db:
+    image: ${POSTGRES_IMAGE:-postgres:16-alpine}
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-tsa}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-tsa}
+      POSTGRES_DB: ${POSTGRES_DB:-tsarchive}
+    command: ["postgres", "-c", "shared_buffers=512MB", "-c", "max_connections=200"]
+    volumes:
+      - ${PGDATA_PATH:-./data/pgdata}:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 5s
+      retries: 20
+
+  # Приём, группировка, очистка — одного экземпляра достаточно
+  worker-ingest:
+    <<: *app
+    command: ["worker"]
+    environment:
+      DATABASE_URL: postgresql://${POSTGRES_USER:-tsa}:${POSTGRES_PASSWORD:-tsa}@db:5432/${POSTGRES_DB:-tsarchive}
+      ARCHIVE_ROOT: /archive
+      WORKER_STAGES: ingest,group,cleanup
+
+  # ffprobe + индекс ключевых кадров, шкала сегмента, превью (и прокси для MPEG-2):
+  # масштабируется `--scale worker-media=N`
+  worker-media:
+    <<: *app
+    command: ["worker"]
+    environment:
+      DATABASE_URL: postgresql://${POSTGRES_USER:-tsa}:${POSTGRES_PASSWORD:-tsa}@db:5432/${POSTGRES_DB:-tsarchive}
+      ARCHIVE_ROOT: /archive
+      WORKER_STAGES: probe,index
+    deploy:
+      replicas: ${MEDIA_WORKERS:-2}
+
+  # Разметка «человек в кадре» (YOLOX + OpenVINO на CPU). Один процесс использует все выделенные
+  # ядра (OpenVINO THROUGHPUT); лимит CPU оставляет ресурсы приёму, индексации и API.
+  # Модель: sh tools/get_models.sh (→ ./models), затем INT8: см. README.
+  worker-detect:
+    <<: *app
+    build: { context: ., dockerfile: app/Dockerfile, target: detect }
+    image: ${DETECT_IMAGE:-ts-archive-detect:latest}
+    command: ["worker"]
+    environment:
+      DATABASE_URL: postgresql://${POSTGRES_USER:-tsa}:${POSTGRES_PASSWORD:-tsa}@db:5432/${POSTGRES_DB:-tsarchive}
+      ARCHIVE_ROOT: /archive
+      WORKER_STAGES: detect
+    volumes:
+      - ${ARCHIVE_PATH:-./data/archive}:/archive
+      - ${MODELS_PATH:-./models}:/models
+    deploy:
+      resources:
+        limits:
+          cpus: "${DETECT_CPUS:-12}"
+
+  api:
+    <<: *app
+    command: ["api"]
+    environment:
+      DATABASE_URL: postgresql://${POSTGRES_USER:-tsa}:${POSTGRES_PASSWORD:-tsa}@db:5432/${POSTGRES_DB:-tsarchive}
+      ARCHIVE_ROOT: /archive
+      USE_X_ACCEL: "1"
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request;urllib.request.urlopen('http://localhost:8000/api/health')"]
+      interval: 10s
+      retries: 10
+
+  nginx:
+    image: ${NGINX_IMAGE:-nginx:1.27-alpine}
+    restart: unless-stopped
+    ports:
+      - "${HTTP_PORT:-8080}:80"
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./web:/usr/share/nginx/html:ro
+      - ${ARCHIVE_PATH:-./data/archive}:/archive:ro
+    depends_on:
+      api: { condition: service_healthy }
+
+  # Опционально: SFTP-приёмник для выгрузки с бортовых регистраторов прямо в incoming/
+  # docker compose --profile sftp up -d
+  sftp:
+    profiles: ["sftp"]
+    image: ${SFTP_IMAGE:-atmoz/sftp:alpine}
+    restart: unless-stopped
+    ports:
+      - "${SFTP_PORT:-2222}:22"
+    command: "${SFTP_USER:-upload}:${SFTP_PASSWORD:-change-me}:1000:1000:incoming"
+    volumes:
+      - ${ARCHIVE_PATH:-./data/archive}/incoming:/home/${SFTP_USER:-upload}/incoming

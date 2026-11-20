@@ -1,0 +1,79 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Видеоархив спецтехники</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+<header class="topbar">
+  <div class="brand">
+    <svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true"><rect x="2" y="6" width="14" height="12" rx="2" fill="none" stroke="currentColor" stroke-width="2"/><path d="M16 10l6-3v10l-6-3z" fill="currentColor"/></svg>
+    <span>Видеоархив спецтехники</span>
+  </div>
+  <div id="stats" class="stats">загрузка…</div>
+  <a class="link" href="/api/docs" target="_blank" rel="noopener">API</a>
+</header>
+
+<div class="layout">
+  <aside class="sidebar">
+    <input id="filter" class="input" type="search" placeholder="Поиск техники или камеры">
+    <div id="tree" class="tree"></div>
+    <p class="hint">Отметьте до 4 камер для синхронного просмотра.</p>
+    <div class="people-head"><span id="peopleTitle">Люди в кадре</span> <span id="peopleCount" class="count"></span></div>
+    <div id="people" class="people"></div>
+  </aside>
+
+  <main class="main">
+    <section id="players" class="players empty">
+      <div class="placeholder">Выберите технику или камеры слева</div>
+    </section>
+
+    <section class="controls">
+      <button id="btnPrev" class="btn" title="Предыдущая запись">⏮</button>
+      <button id="btnBack" class="btn" title="−10 с (←)">−10с</button>
+      <button id="btnPlay" class="btn primary" title="Пуск/пауза (пробел)">▶</button>
+      <button id="btnFwd" class="btn" title="+10 с (→)">+10с</button>
+      <button id="btnNext" class="btn" title="Следующая запись">⏭</button>
+      <select id="detKind" class="input small" title="Какие интервалы использовать для переходов, списка слева и режима «только отмеченное»">
+        <option value="person">все люди</option><option value="no_helmet">без каски</option>
+      </select>
+      <button id="btnPrevPerson" class="btn person-btn" title="Предыдущий интервал (Shift+P)">◀ люди</button>
+      <button id="btnNextPerson" class="btn person-btn" title="Следующий интервал (P)">люди ▶</button>
+      <select id="speed" class="input small" title="Скорость">
+        <option value="0.5">0.5×</option><option value="1" selected>1×</option><option value="2">2×</option>
+        <option value="4">4×</option><option value="8">8×</option><option value="16">16×</option>
+      </select>
+      <div id="clock" class="clock">--.--.---- --:--:--</div>
+      <input id="gotoTime" class="input" type="datetime-local" step="1" title="Перейти к моменту">
+      <button id="btnGoto" class="btn">Перейти</button>
+      <span class="spacer"></span>
+      <label class="check" title="Воспроизводить только интервалы, где есть люди"><input id="onlyPeople" type="checkbox"> <span id="onlyLabel">только с людьми</span></label>
+      <label class="check" title="Рамки поверх видео"><input id="showBoxes" type="checkbox" checked> рамки</label>
+      <button id="btnMark" class="btn" title="Поставить метку в текущий момент">Метка</button>
+      <button id="btnExport" class="btn" disabled title="Shift + протянуть по таймлайну">Выгрузить</button>
+    </section>
+
+    <section class="timeline-wrap">
+      <div class="tl-toolbar">
+        <button class="btn small" data-zoom="900">15 мин</button>
+        <button class="btn small" data-zoom="3600">1 ч</button>
+        <button class="btn small" data-zoom="21600">6 ч</button>
+        <button class="btn small" data-zoom="86400">сутки</button>
+        <button class="btn small" data-zoom="604800">неделя</button>
+        <button class="btn small" id="btnFit">всё</button>
+        <span class="legend"><i class="lg done"></i>запись <i class="lg pending"></i>обработка <i class="lg error"></i>ошибка <i class="lg ev"></i>метка <i class="lg person"></i>люди <i class="lg zone"></i>люди в зоне <i class="lg nohelmet"></i>без каски</span>
+        <span id="selInfo" class="sel-info"></span>
+      </div>
+      <canvas id="timeline" class="timeline"></canvas>
+      <div id="tooltip" class="tooltip hidden"><div id="ttThumb" class="tt-thumb"></div><div id="ttText"></div></div>
+    </section>
+  </main>
+</div>
+
+<div id="toast" class="toast hidden"></div>
+<script src="vendor/hls.min.js"></script>
+<script src="app.js"></script>
+</body>
+</html>
